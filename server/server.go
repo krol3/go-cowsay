@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os/exec"
 )
 
@@ -15,12 +16,25 @@ func printVersion() {
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the HomePage!")
+}
 
-	key := r.URL.Query().Get("key")
-	fmt.Println("key =>", key)
-	fmt.Println("Endpoint Hit: homePage")
+func cowPage(w http.ResponseWriter, r *http.Request) {
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "invalid request")
+		return
+	}
+
+	key := query.Get("key")
+	if len(key) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "missing parameter: ?key=")
+		return
+	}
 	output := callCmd(key)
-	fmt.Fprintf(w, "Output:\n%s\n", string(output))
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "Cow Output:\n%s\n", string(output))
 }
 
 func versionPage(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +56,7 @@ func callCmd(param1 string) []byte {
 func handleRequests() {
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/version/", versionPage)
+	http.HandleFunc("/cow/", cowPage)
 	log.Fatal(http.ListenAndServe(":10000", nil))
 }
 
