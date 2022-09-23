@@ -1,0 +1,74 @@
+# Go project using a SLSA3 compliant builder.
+# This workflow will generate a so-called "provenance" file
+# The project is an initiative of the OpenSSF (openssf.org) and is developed at 
+# https://github.com/slsa-framework/slsa-github-generator.
+# The provenance file can be verified using https://github.com/slsa-framework/slsa-verifier.
+
+name: SLSA Go releaser
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+  push:
+    branches: [ main ]
+    tags:
+      - "*"
+permissions: read-all
+
+jobs:
+  # Generate ldflags dynamically.
+  args:
+    runs-on: ubuntu-latest
+    outputs:
+      commit-date: ${{ steps.ldflags.outputs.commit-date }}
+      commit: ${{ steps.ldflags.outputs.commit }}
+      version: ${{ steps.ldflags.outputs.version }}
+      tree-state: ${{ steps.ldflags.outputs.tree-state }}
+      ldflags: ${{ steps.ldflags.outputs.value }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@ec3a7ce113134d7a93b817d10a8272cb61118579 # v2.3.4
+        with:
+          fetch-depth: 0
+      - id: ldflags
+        run: |
+          echo "::set-output name=commit-date::$(git log --date=iso8601-strict -1 --pretty=%ct)"
+          echo "::set-output name=commit::$GITHUB_SHA"
+          echo "::set-output name=version::$(git describe --tags --always --dirty | cut -c2-)"
+          echo "::set-output name=tree-state::$(if git diff --quiet; then echo "clean"; else echo "dirty"; fi)"
+          echo "::set-output name=value::$(./scripts/version-ldflags)"
+
+  # Trusted builder.
+  build:
+    permissions:
+      id-token: write # To sign the provenance.
+      contents: write # To upload assets to release.
+      actions: read # To read the workflow path.
+    needs: args
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v1.2.0
+    with:
+      go-version: 1.18
+      # Optional: only needed if using ldflags.
+      evaluated-envs: "COMMIT_DATE:${{needs.args.outputs.commit-date}}, COMMIT:${{needs.args.outputs.commit}}, VERSION:${{needs.args.outputs.version}}, TREE_STATE:${{needs.args.outputs.tree-state}}, VERSION_LDFLAGS:${{needs.args.outputs.ldflags}}"
+      compile-builder: true
+
+  # Upload to GitHub release.
+  upload:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/download-artifact@fb598a63ae348fa914e94cd0ff38f362e927b741
+        with:
+          name: ${{ needs.build.outputs.go-binary-name }}
+      - uses: actions/download-artifact@fb598a63ae348fa914e94cd0ff38f362e927b741
+        with:
+          name: ${{ needs.build.outputs.go-binary-name }}.intoto.jsonl
+      - name: Release
+        uses: softprops/action-gh-release@1e07f4398721186383de40550babbdf2b84acfc5
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ${{ needs.build.outputs.go-binary-name }}
+            ${{ needs.build.outputs.go-binary-name }}.intoto.jsonl
