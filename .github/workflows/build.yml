@@ -1,0 +1,68 @@
+name: scan-image
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+env:
+  ORG: "krol"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+
+  image:
+    name: Image scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # needed for signing the images with GitHub OIDC Token **not production ready**
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v3
+    - name: Build image
+      run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+    - name: Trivy vulnerability scanner
+      id: trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'image'
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        scan-ref: '.'
+        trivy-config: trivy.yaml
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v2.0.0
+
+    - name: Check install!
+      run: cosign version
+
+    - name: Log in to GHCR
+      uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2.0.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      id: build-and-push
+      uses: docker/build-push-action@v2.9.0
+      with:
+        context: .
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+    - name: Sign image with a key
+      run: |
+        cosign sign --key env://COSIGN_PRIVATE_KEY -a sha=${{ github.sha }} -a run_id=${{ github.run_id }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+      env:
+        COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+
+    - name: Sign the images with GitHub OIDC Token **not production ready**
+      run: cosign sign ${TAGS}
+      env:
+        TAGS: ${{ steps.docker_meta.outputs.tags }}
+        COSIGN_EXPERIMENTAL: true
