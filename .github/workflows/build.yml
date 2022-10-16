@@ -62,7 +62,7 @@ jobs:
           
     - name: Sign image with a key
       run: |
-        cosign sign --key env://COSIGN_PRIVATE_KEY -a sha=${{ github.sha }} -a run_id=${{ github.run_id }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        cosign sign --key cosign.key -a sha=${{ github.sha }} -a run_id=${{ github.run_id }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
       env:
         COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
         COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
