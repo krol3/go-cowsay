@@ -1,7 +1,15 @@
+name: Chain-bench CIS guide
+on:
+  # Only the default branch is supported.
+  branch_protection_rule:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
   chain_bench_scan:
     runs-on: ubuntu-latest
-    name: Test Job
+    name: chain-bench scanning
     steps:
       - name: Chain Bench
         id: chain-bench
