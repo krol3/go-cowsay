@@ -1,5 +1,5 @@
 GIT_COMMIT:=$(shell git rev-list -1 HEAD)
-GH_APP:=demo
+GH_APP:=go-cowsay
 GOOS=darwin
 GOARCH=arm64
 
@@ -11,3 +11,6 @@ build:
 
 test:
 	go test -v ./...
+
+image:
+	docker buildx build -t $(GH_APP):$(GIT_COMMIT) .
